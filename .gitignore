@@ -94,3 +94,6 @@ $RECYCLE.BIN/
 *.DS_Store
 *.swp
 *.out
+*.dll
+*.exe
+*.lib

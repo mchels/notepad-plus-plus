@@ -284,7 +284,7 @@ class TestSimple(unittest.TestCase):
 			self.assertEquals(self.ed.LineLength(0), 1 + len(lineEnds[lineEndType]))
 
 	# Several tests for unicode line ends U+2028 and U+2029
-	
+
 	def testUnicodeLineEnds(self):
 		# Add two lines separated with U+2028 and ensure it is seen as two lines
 		# Then remove U+2028 and should be just 1 lines
@@ -368,7 +368,7 @@ class TestSimple(unittest.TestCase):
 		text = b"x\xe2\x80\xa9y";
 		self.ed.AddText(5, text)
 		self.assertEquals(self.ed.LineCount, 2)
-		
+
 		for i in range(len(text)):
 			self.ed.TargetStart = i
 			self.ed.TargetEnd = i + 1
@@ -379,7 +379,7 @@ class TestSimple(unittest.TestCase):
 			else:
 				# Removing byte from line end, removes 1 line
 				self.assertEquals(self.ed.LineCount, 1)
-				
+
 			self.ed.TargetEnd = i
 			self.ed.ReplaceTarget(1, text[i:i+1])
 			self.assertEquals(self.ed.LineCount, 2)
@@ -397,7 +397,7 @@ class TestSimple(unittest.TestCase):
 			self.ed.TargetEnd = i+2
 			self.ed.ReplaceTarget(0, b"")
 			self.assertEquals(self.ed.LineCount, 1)
-		
+
 	# Several tests for unicode NEL line ends U+0085
 
 	def testNELLineEnds(self):
@@ -450,7 +450,7 @@ class TestSimple(unittest.TestCase):
 		text = b"x\xc2\x85y";
 		self.ed.AddText(4, text)
 		self.assertEquals(self.ed.LineCount, 2)
-		
+
 		for i in range(len(text)):
 			self.ed.TargetStart = i
 			self.ed.TargetEnd = i + 1
@@ -461,7 +461,7 @@ class TestSimple(unittest.TestCase):
 			else:
 				# Removing byte from line end, removes 1 line
 				self.assertEquals(self.ed.LineCount, 1)
-				
+
 			self.ed.TargetEnd = i
 			self.ed.ReplaceTarget(1, text[i:i+1])
 			self.assertEquals(self.ed.LineCount, 2)
@@ -477,7 +477,7 @@ class TestSimple(unittest.TestCase):
 			self.ed.TargetEnd = i+2
 			self.ed.ReplaceTarget(0, b"")
 			self.assertEquals(self.ed.LineCount, 1)
-		
+
 	def testGoto(self):
 		self.ed.AddText(5, b"a\nb\nc")
 		self.assertEquals(self.ed.CurrentPos, 5)
@@ -1348,6 +1348,40 @@ class TestMultiSelection(unittest.TestCase):
 		self.assertEquals(self.ed.GetSelectionNCaret(0), 3)
 		self.assertEquals(self.ed.GetSelectionNCaretVirtualSpace(0), 0)
 
+	def testDropSelectionN(self):
+		self.ed.SetSelection(1, 2)
+		# Only one so dropping has no effect
+		self.ed.DropSelectionN(0)
+		self.assertEquals(self.ed.Selections, 1)
+		self.ed.AddSelection(4, 5)
+		self.assertEquals(self.ed.Selections, 2)
+		# Outside bounds so no effect
+		self.ed.DropSelectionN(2)
+		self.assertEquals(self.ed.Selections, 2)
+		# Dropping before main so main decreases
+		self.ed.DropSelectionN(0)
+		self.assertEquals(self.ed.Selections, 1)
+		self.assertEquals(self.ed.MainSelection, 0)
+		self.assertEquals(self.ed.GetSelectionNCaret(0), 4)
+		self.assertEquals(self.ed.GetSelectionNAnchor(0), 5)
+
+		self.ed.AddSelection(10, 11)
+		self.ed.AddSelection(20, 21)
+		self.assertEquals(self.ed.Selections, 3)
+		self.assertEquals(self.ed.MainSelection, 2)
+		self.ed.MainSelection = 1
+		# Dropping after main so main does not change
+		self.ed.DropSelectionN(2)
+		self.assertEquals(self.ed.MainSelection, 1)
+
+		# Dropping first selection so wraps around to new last.
+		self.ed.AddSelection(30, 31)
+		self.ed.AddSelection(40, 41)
+		self.assertEquals(self.ed.Selections, 4)
+		self.ed.MainSelection = 0
+		self.ed.DropSelectionN(0)
+		self.assertEquals(self.ed.MainSelection, 2)
+
 class TestCaseMapping(unittest.TestCase):
 	def setUp(self):
 		self.xite = Xite.xiteFrame
@@ -1416,7 +1450,7 @@ class TestCaseMapping(unittest.TestCase):
 	def testUTFGrows(self):
 		# This crashed at one point in debug builds due to looking past end of shorter string
 		self.ed.SetCodePage(65001)
-		# ﬖ is a single character ligature taking 3 bytes in UTF8: EF AC 96 
+		# ﬖ is a single character ligature taking 3 bytes in UTF8: EF AC 96
 		t = 'ﬖﬖ'.encode("UTF-8")
 		self.ed.SetContents(t)
 		self.assertEquals(self.ed.Length, 6)
@@ -1539,7 +1573,7 @@ class TestLexer(unittest.TestCase):
 		self.assertEquals(self.ed.GetLexer(), self.ed.SCLEX_CPP)
 		name = self.ed.GetLexerLanguage(0)
 		self.assertEquals(name, b"cpp")
-	
+
 	def testPropertyNames(self):
 		propertyNames = self.ed.PropertyNames()
 		self.assertNotEquals(propertyNames, b"")

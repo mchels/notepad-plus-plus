@@ -9450,6 +9450,11 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		Redraw();
 		break;
 
+    case SCI_DROPSELECTIONN:
+		sel.DropSelection(static_cast<int>(wParam));
+		Redraw();
+		break;
+
 	case SCI_SETMAINSELECTION:
 		sel.SetMain(wParam);
 		Redraw();
