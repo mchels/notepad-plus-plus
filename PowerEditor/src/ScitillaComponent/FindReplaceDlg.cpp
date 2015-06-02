@@ -25,12 +25,15 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
-
-#include "precompiledHeaders.h"
+#include <Shlobj.h>
+#include <uxtheme.h>
 #include "FindReplaceDlg.h"
 #include "ScintillaEditView.h"
 #include "Notepad_plus_msgs.h"
 #include "UniConversion.h"
+#include "LongRunningOperation.h"
+
+using namespace std;
 
 FindOption * FindReplaceDlg::_env;
 FindOption FindReplaceDlg::_options;
@@ -38,19 +41,22 @@ FindOption FindReplaceDlg::_options;
 #define SHIFTED 0x8000
 
 
-int Searching::convertExtendedToString(const TCHAR * query, TCHAR * result, int length) {	//query may equal to result, since it always gets smaller
+int Searching::convertExtendedToString(const TCHAR * query, TCHAR * result, int length) 
+{	//query may equal to result, since it always gets smaller
 	int i = 0, j = 0;
 	int charLeft = length;
-	bool isGood = true;
 	TCHAR current;
-	while(i < length) {	//because the backslash escape quences always reduce the size of the generic_string, no overflow checks have to be made for target, assuming parameters are correct
+	while (i < length)
+	{	//because the backslash escape quences always reduce the size of the generic_string, no overflow checks have to be made for target, assuming parameters are correct
 		current = query[i];
 		--charLeft;
-		if (current == '\\' && charLeft) {	//possible escape sequence
+		if (current == '\\' && charLeft)
+		{	//possible escape sequence
 			++i;
 			--charLeft;
 			current = query[i];
-			switch(current) {
+			switch(current)
+			{
 				case 'r':
 					result[j] = '\r';
 					break;
@@ -70,38 +76,54 @@ int Searching::convertExtendedToString(const TCHAR * query, TCHAR * result, int 
 				case 'd':
 				case 'o':
 				case 'x':
-				case 'u': {
+				case 'u': 
+				{
 					int size = 0, base = 0;
-					if (current == 'b') {			//11111111
+					if (current == 'b')
+					{	//11111111
 						size = 8, base = 2;
-					} else if (current == 'o') {	//377
+					}
+					else if (current == 'o')
+					{	//377
 						size = 3, base = 8;
-					} else if (current == 'd') {	//255
+					}
+					else if (current == 'd')
+					{	//255
 						size = 3, base = 10;
-					} else if (current == 'x') {	//0xFF
+					}
+					else if (current == 'x')
+					{	//0xFF
 						size = 2, base = 16;
-					} else if (current == 'u') {	//0xCDCD
+					}
+					else if (current == 'u')
+					{	//0xCDCD
 						size = 4, base = 16;
 					}
-					if (charLeft >= size) {
+					
+					if (charLeft >= size) 
+					{
 						int res = 0;
-						if (Searching::readBase(query+(i+1), &res, base, size)) {
+						if (Searching::readBase(query+(i+1), &res, base, size))
+						{
 							result[j] = (TCHAR)res;
-							i+=size;
+							i += size;
 							break;
 						}
 					}
 					//not enough chars to make parameter, use default method as fallback
-					}
-				default: {	//unknown sequence, treat as regular text
+				}
+				
+				default: 
+				{	//unknown sequence, treat as regular text
 					result[j] = '\\';
 					++j;
 					result[j] = current;
-					isGood = false;
 					break;
 				}
 			}
-		} else {
+		}
+		else
+		{
 			result[j] = query[i];
 		}
 		++i;
@@ -706,6 +728,7 @@ BOOL CALLBACK FindReplaceDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lP
 
 				case IDREPLACE :
 				{
+					LongRunningOperation op;
 					if (_currentStatus == REPLACE_DLG)
 					{
 						setStatusbarMessage(TEXT(""), FSNoMessage);
@@ -792,6 +815,7 @@ BOOL CALLBACK FindReplaceDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lP
 
 				case IDD_FINDINFILES_REPLACEINFILES :
 				{
+					LongRunningOperation op;
 					setStatusbarMessage(TEXT(""), FSNoMessage);
 					const int filterSize = 256;
 					TCHAR filters[filterSize];
@@ -832,6 +856,7 @@ BOOL CALLBACK FindReplaceDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lP
 
 				case IDC_REPLACE_OPENEDFILES :
 				{
+					LongRunningOperation op;
 					if (_currentStatus == REPLACE_DLG)
 					{
 						setStatusbarMessage(TEXT(""), FSNoMessage);
@@ -852,6 +877,7 @@ BOOL CALLBACK FindReplaceDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lP
 
 				case IDREPLACEALL :
 				{
+					LongRunningOperation op;
 					if (_currentStatus == REPLACE_DLG)
 					{
 						setStatusbarMessage(TEXT(""), FSNoMessage);
@@ -2479,6 +2505,75 @@ void Finder::openAll()
 	}
 }
 
+bool Finder::isLineActualSearchResult(int line) const
+{
+	const int foldLevel = _scintView.execute(SCI_GETFOLDLEVEL, line) & SC_FOLDLEVELNUMBERMASK;
+	return foldLevel == SC_FOLDLEVELBASE + 3;
+}
+
+generic_string Finder::prepareStringForClipboard(generic_string s) const
+{
+	// Input: a string like "\tLine 3: search result".
+	// Output: "search result"
+	s = stringReplace(s, TEXT("\r"), TEXT(""));
+	s = stringReplace(s, TEXT("\n"), TEXT(""));
+	const unsigned int firstColon = s.find(TEXT(':'));
+	if (firstColon == std::string::npos)
+	{
+		// Should never happen.
+		assert(false);
+		return s;
+	}
+	else
+	{
+		// Plus 2 in order to deal with ": ".
+		return s.substr(2 + firstColon);
+	}
+}
+
+void Finder::copy()
+{
+	size_t fromLine, toLine;
+	{
+		const int selStart = _scintView.execute(SCI_GETSELECTIONSTART);
+		const int selEnd = _scintView.execute(SCI_GETSELECTIONEND);
+		const bool hasSelection = selStart != selEnd;
+		const pair<int, int> lineRange = _scintView.getSelectionLinesRange();
+		if (hasSelection && lineRange.first != lineRange.second)
+		{
+			fromLine = lineRange.first;
+			toLine = lineRange.second;
+		}
+		else
+		{
+			// Abuse fold levels to find out which lines to copy to clipboard.
+			// We get the current line and then the next line which has a smaller fold level (SCI_GETLASTCHILD).
+			// Then we loop all lines between them and determine which actually contain search results.
+			fromLine = _scintView.getCurrentLineNumber();
+			const int selectedLineFoldLevel = _scintView.execute(SCI_GETFOLDLEVEL, fromLine) & SC_FOLDLEVELNUMBERMASK;
+			toLine = _scintView.execute(SCI_GETLASTCHILD, fromLine, selectedLineFoldLevel);
+		}
+	}
+
+	std::vector<generic_string> lines;
+	for (size_t line = fromLine; line <= toLine; ++line)
+	{
+		if (isLineActualSearchResult(line))
+		{
+			lines.push_back(prepareStringForClipboard(_scintView.getLine(line)));
+		}
+	}
+	const generic_string toClipboard = stringJoin(lines, TEXT("\r\n"));
+	if (!toClipboard.empty())
+	{
+		if (!str2Clipboard(toClipboard.c_str(), _hSelf))
+		{
+			assert(false);
+			::MessageBox(NULL, TEXT("Error placing text in clipboard."), TEXT("Notepad++"), MB_ICONINFORMATION);
+		}
+	}
+}
+
 void Finder::beginNewFilesSearch()
 {
 	//_scintView.execute(SCI_SETLEXER, SCLEX_NULL);
@@ -2591,7 +2686,7 @@ BOOL CALLBACK Finder::run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam)
 
 				case NPPM_INTERNAL_SCINTILLAFINFERCOPY :
 				{
-					_scintView.execute(SCI_COPY);
+					copy();
 					return TRUE;
 				}
 
@@ -2632,10 +2727,10 @@ BOOL CALLBACK Finder::run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam)
 				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFERUNCOLLAPSE, TEXT("Uncollapse all")));
 				tmp.push_back(MenuItemUnit(0, TEXT("Separator")));
 				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFERCOPY, TEXT("Copy")));
-				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFERSELECTALL, TEXT("Select All")));
-				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFERCLEARALL, TEXT("Clear All")));
+				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFERSELECTALL, TEXT("Select all")));
+				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFERCLEARALL, TEXT("Clear all")));
 				tmp.push_back(MenuItemUnit(0, TEXT("Separator")));
-				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFEROPENALL, TEXT("Open All")));
+				tmp.push_back(MenuItemUnit(NPPM_INTERNAL_SCINTILLAFINFEROPENALL, TEXT("Open all")));
 
 				scintillaContextmenu.create(_hSelf, tmp);
 
@@ -2975,8 +3070,7 @@ HWND Progress::open(HWND hCallerWnd, const TCHAR* header)
 	else
 		_tcscpy_s(_header, _countof(_header), cDefaultHeader);
 
-	_hThread = ::CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)threadFunc,
-		(LPVOID)this, 0, NULL);
+	_hThread = ::CreateThread(NULL, 0, threadFunc, this, 0, NULL);
 	if (!_hThread)
 	{
 		::CloseHandle(_hActiveState);

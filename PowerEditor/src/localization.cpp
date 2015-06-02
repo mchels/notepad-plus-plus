@@ -26,13 +26,12 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 
-#include "precompiledHeaders.h"
 #include "Notepad_plus.h"
 #include "ShortcutMapper.h"
 #include "EncodingMapper.h"
-
 #include "localization.h"
 
+using namespace std;
 
 void NativeLangSpeaker::init(TiXmlDocumentA *nativeLangDocRootA, bool loadIfEnglish)
 {
@@ -82,7 +81,6 @@ generic_string NativeLangSpeaker::getSpecialMenuEntryName(const char *entryName)
 	if (!mainMenu) return TEXT("");
 	TiXmlNodeA *entriesRoot = mainMenu->FirstChild("Entries");
 	if (!entriesRoot) return TEXT("");
-	const char *idName = NULL;
 
 	WcharMbcsConvertor *wmc = WcharMbcsConvertor::getInstance();
 
@@ -92,7 +90,7 @@ generic_string NativeLangSpeaker::getSpecialMenuEntryName(const char *entryName)
 	{
 		TiXmlElementA *element = childNode->ToElement();
 
-		idName = element->Attribute("idName");
+		const char *idName = element->Attribute("idName");
 		if (idName)
 		{
 			const char *name = element->Attribute("name");
@@ -397,11 +395,12 @@ void NativeLangSpeaker::changeLangTabDrapContextMenu(HMENU hCM)
 {
 	const int POS_GO2VIEW = 0;
 	const int POS_CLONE2VIEW = 1;
-	const char *goToViewA = NULL;
-	const char *cloneToViewA = NULL;
 
 	if (_nativeLangA)
 	{
+		const char *goToViewA = NULL;
+		const char *cloneToViewA = NULL;
+		
 		TiXmlNodeA *tabBarMenu = _nativeLangA->FirstChild("Menu");
 		if (tabBarMenu)
 			tabBarMenu = tabBarMenu->FirstChild("TabBar");

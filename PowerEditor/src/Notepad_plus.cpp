@@ -25,8 +25,8 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
-
-#include "precompiledHeaders.h"
+#include <time.h>
+#include <shlwapi.h>
 #include "Notepad_plus.h"
 #include "Notepad_plus_Window.h"
 #include "FileDialog.h"
@@ -47,6 +47,8 @@
 #include "ProjectPanel.h"
 #include "documentMap.h"
 #include "functionListPanel.h"
+
+using namespace std;
 
 enum tb_stat {tb_saved, tb_unsaved, tb_ro};
 #define DIR_LEFT true
@@ -956,12 +958,12 @@ int Notepad_plus::getHtmlXmlEncoding(const TCHAR *fileName) const
 		if (posFound != -1 && posFound != -2)
 		{
             const char *encodingBlockRegExpr = "encoding[ \\t]*=[ \\t]*\"[^\".]+\"";
-            posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingBlockRegExpr), (LPARAM)encodingBlockRegExpr);
+            _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingBlockRegExpr), (LPARAM)encodingBlockRegExpr);
 
             const char *encodingRegExpr = "\".+\"";
-            posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingRegExpr), (LPARAM)encodingRegExpr);
+            _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingRegExpr), (LPARAM)encodingRegExpr);
 
-			posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingAliasRegExpr), (LPARAM)encodingAliasRegExpr);
+			_invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingAliasRegExpr), (LPARAM)encodingAliasRegExpr);
 
             startPos = int(_invisibleEditView.execute(SCI_GETTARGETSTART));
 			endPos = int(_invisibleEditView.execute(SCI_GETTARGETEND));
@@ -998,9 +1000,9 @@ int Notepad_plus::getHtmlXmlEncoding(const TCHAR *fileName) const
 			if (posFound == -1 || posFound == -2)
 				return -1;
 		}
-		posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(charsetBlock), (LPARAM)charsetBlock);
-		posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(intermediaire), (LPARAM)intermediaire);
-		posFound = _invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingStrRE), (LPARAM)encodingStrRE);
+		_invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(charsetBlock), (LPARAM)charsetBlock);
+		_invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(intermediaire), (LPARAM)intermediaire);
+		_invisibleEditView.execute(SCI_SEARCHINTARGET, strlen(encodingStrRE), (LPARAM)encodingStrRE);
 
         startPos = int(_invisibleEditView.execute(SCI_GETTARGETSTART));
 		endPos = int(_invisibleEditView.execute(SCI_GETTARGETEND));
@@ -1931,7 +1933,7 @@ void Notepad_plus::copyMarkedLines()
 			globalStr = currentStr;
 		}
 	}
-	str2Cliboard(globalStr.c_str());
+	str2Cliboard(globalStr);
 }
 
 void Notepad_plus::cutMarkedLines()
@@ -1951,7 +1953,7 @@ void Notepad_plus::cutMarkedLines()
 		}
 	}
 	_pEditView->execute(SCI_ENDUNDOACTION);
-	str2Cliboard(globalStr.c_str());
+	str2Cliboard(globalStr);
 }
 
 void Notepad_plus::deleteMarkedLines(bool isMarked)
@@ -1970,11 +1972,8 @@ void Notepad_plus::deleteMarkedLines(bool isMarked)
 void Notepad_plus::pasteToMarkedLines()
 {
 	int clipFormat;
-#ifdef UNICODE
 	clipFormat = CF_UNICODETEXT;
-#else
-	clipFormat = CF_TEXT;
-#endif
+
 	BOOL canPaste = ::IsClipboardFormatAvailable(clipFormat);
 	if (!canPaste)
 		return;
@@ -4556,39 +4555,9 @@ void Notepad_plus::getCurrentOpenedFiles(Session & session, bool includUntitledD
 	_invisibleEditView.execute(SCI_SETDOCPOINTER, 0, oldDoc);
 }
 
-bool Notepad_plus::str2Cliboard(const TCHAR *str2cpy)
+bool Notepad_plus::str2Cliboard(const generic_string & str2cpy)
 {
-	if (!str2cpy)
-		return false;
-
-	int len2Allocate = lstrlen(str2cpy) + 1;
-	len2Allocate *= sizeof(TCHAR);
-	unsigned int cilpboardFormat = CF_TEXT;
-
-#ifdef UNICODE
-	cilpboardFormat = CF_UNICODETEXT;
-#endif
-
-	HGLOBAL hglbCopy = ::GlobalAlloc(GMEM_MOVEABLE, len2Allocate);
-	if (hglbCopy == NULL)
-	{
-		return false;
-	}
-
-	if (!::OpenClipboard(_pPublicInterface->getHSelf()))
-		return false;
-
-	::EmptyClipboard();
-
-	// Lock the handle and copy the text to the buffer.
-	TCHAR *pStr = (TCHAR *)::GlobalLock(hglbCopy);
-	lstrcpy(pStr, str2cpy);
-	::GlobalUnlock(hglbCopy);
-
-	// Place the handle on the clipboard.
-	::SetClipboardData(cilpboardFormat, hglbCopy);
-	::CloseClipboard();
-	return true;
+	return str2Clipboard(str2cpy, _pPublicInterface->getHSelf());
 }
 
 //ONLY CALL IN CASE OF EMERGENCY: EXCEPTION
@@ -5546,7 +5515,6 @@ Quote quotes[nbQuote] = {
 {"Bob Gray", "Writing in C or C++ is like running a chain saw with all the safety guards removed."},
 {"Roberto Waltman", "In the one and only true way. The object-oriented version of \"Spaghetti code\" is, of course, \"Lasagna code\". (Too many layers)"},
 {"Gavin Russell Baker", "C++ : Where friends have access to your private members."},
-{"Alanna", "Saying that Java is nice because it works on all OSes is like saying that anal sex is nice because it works on all genders."},
 {"Linus Torvalds", "Software is like sex: It's better when it's free."},
 {"Cult of vi", "Emacs is a great operating system, lacking only a decent editor."},
 {"Church of Emacs", "vi has two modes - \"beep repeatedly\" and \"break everything\"."},
@@ -5642,7 +5610,7 @@ Quote quotes[nbQuote] = {
 {"Anonymous #81", "A male engineering student was crossing a road one day when a frog called out to him and said, \"If you kiss me, I'll turn into a beautiful princess.\" He bent over, picked up the frog, and put it in his pocket.\n\nThe frog spoke up again and said, \"If you kiss me and turn me back into a beautiful princess, I will stay with you for one week.\" The engineering student took the frog out of his pocket, smiled at it; and returned it to his pocket.\n\nThe frog then cried out, \"If you kiss me and turn me back into a princess, I'll stay with you and do ANYTHING you want.\" Again the boy took the frog out, smiled at it, and put it back into his pocket.\n\nFinally, the frog asked, \"What is the matter? I've told you I'm a beautiful princess, that I'll stay with you for a week and do anything you want. Why won't you kiss me?\" The boy said, \"Look I'm an engineer. I don't have time for a girlfriend, but a talking frog is cool.\"\n"},
 {"Anonymous #82", "Programmers never die.\nThey just go offline."},
 {"Anonymous #83", "Copy from one, it's plagiarism.\nCopy from two, it's research."},
-//{"Anonymous #84", ""},
+{"Anonymous #84", "Saying that Java is nice because it works on all OSes is like saying that anal sex is nice because it works on all genders."},
 {"Anonymous #85", "Race, religion, ethnic pride and nationalism etc... does nothing but teach you how to hate people that you've never met."},
 {"Anonymous #86", "Farts are just the ghosts of the things we eat."},
 {"Anonymous #87", "I promised I would never kill someone who had my blood.\nBut that mosquito made me break my word."},
@@ -6074,7 +6042,8 @@ void Notepad_plus::showQuote(const char *quote, const char *quoter, bool doTroll
 void Notepad_plus::launchDocumentBackupTask()
 {
 	HANDLE hThread = ::CreateThread(NULL, 0, backupDocument, NULL, 0, NULL);
-    ::CloseHandle(hThread);
+	if (hThread)
+		::CloseHandle(hThread);
 }
 
 DWORD WINAPI Notepad_plus::backupDocument(void * /*param*/)
@@ -6150,7 +6119,6 @@ bool Notepad_plus::undoStreamComment()
 	generic_string white_space(TEXT(" "));
 	int start_comment_length = start_comment.length();
 	int end_comment_length = end_comment.length();
-	int startCommentLength, endCommentLength;
 
 	do { // do as long as stream-comments are within selection
 
@@ -6166,7 +6134,7 @@ bool Notepad_plus::undoStreamComment()
 
 		//-- First, search all start_comment and end_comment before and after the selectionStart and selectionEnd position.
 		const int iSelStart=0, iSelEnd=1;
-		#define N_CMNT 2
+		const size_t N_CMNT = 2;
 		int posStartCommentBefore[N_CMNT], posEndCommentBefore[N_CMNT], posStartCommentAfter[N_CMNT], posEndCommentAfter[N_CMNT];
 		bool blnStartCommentBefore[N_CMNT], blnEndCommentBefore[N_CMNT], blnStartCommentAfter[N_CMNT], blnEndCommentAfter[N_CMNT];
 		int posStartComment, posEndComment;
@@ -6238,8 +6206,8 @@ bool Notepad_plus::undoStreamComment()
 		//-- Ok, there are valid start-comment and valid end-comment around the caret-position.
 		//   Now, un-comment stream-comment:
 		retVal = true;
-		startCommentLength = start_comment_length;
-		endCommentLength = end_comment_length;
+		int startCommentLength = start_comment_length;
+		int endCommentLength = end_comment_length;
 		//-- First delete end-comment, so that posStartCommentBefore does not change!
 		//-- Get character before end-comment to decide, if there is a white character before the end-comment, which will be removed too!
 		_pEditView->getGenericText(charbuf, charbufLen, posEndComment-1, posEndComment);
